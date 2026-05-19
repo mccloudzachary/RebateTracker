@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en-US">
 <head>
@@ -267,9 +268,14 @@ h1, h2, h3, h4, h5, h6 { font-weight: 600; }
     <div class="container-fluid">
         <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
             <h1 class="mb-0">Products</h1>
-            <button class="btn btn-primary" id="addProductBtn">
-                <i class="fa fa-plus"></i> Add Product
-            </button>
+            <div class="d-flex gap-2 flex-wrap">
+                <button class="btn btn-primary" id="addProductBtn">
+                    <i class="fa fa-plus"></i> Add Product
+                </button>
+                <button class="btn btn-outline-danger" id="deleteAllProductsBtn" title="Delete all products + price sheet for the current year (password protected)">
+                    <i class="fa fa-trash"></i> Delete All Products
+                </button>
+            </div>
         </div>
 
         <div class="card mb-3">
@@ -443,7 +449,21 @@ h1, h2, h3, h4, h5, h6 { font-weight: 600; }
                         <label class="form-label small-label">Search (PO # / product / distributor)</label>
                         <input class="form-control form-control-sm" type="text" id="po_search" placeholder="...">
                     </div>
-                    <div class="col-md-5 text-end">
+                    <div class="col-md-4">
+                        <div class="form-check form-switch mt-2">
+                            <input class="form-check-input" type="checkbox" id="po_rebate_only">
+                            <label class="form-check-label small" for="po_rebate_only">
+                                Show only lines with rebate programs
+                            </label>
+                        </div>
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="po_no_rebate_only">
+                            <label class="form-check-label small" for="po_no_rebate_only">
+                                Show only lines WITHOUT rebate programs
+                            </label>
+                        </div>
+                    </div>
+                    <div class="col-md-3 text-end">
                         <span class="text-muted small" id="po_count"></span>
                     </div>
                 </div>
@@ -768,6 +788,14 @@ h1, h2, h3, h4, h5, h6 { font-weight: 600; }
                 <div id="inv_imp_step_preview" style="display:none;">
                     <div class="alert alert-info small mb-3" id="inv_imp_summary"></div>
 
+                    <div class="form-check form-switch mb-3">
+                        <input class="form-check-input" type="checkbox" id="inv_imp_replace">
+                        <label class="form-check-label small" for="inv_imp_replace">
+                            <strong>Replace existing INV- POs</strong> &mdash; re-resolve distributor + manufacturer from the file
+                            (use this to fix wrong dist/mfr from older imports). Other POs (manual / PO Listing) untouched.
+                        </label>
+                    </div>
+
                     <!-- Unmatched products section -->
                     <div id="inv_imp_unmatched_section" style="display:none;">
                         <h6 class="text-uppercase small text-muted mb-2">
@@ -852,6 +880,130 @@ h1, h2, h3, h4, h5, h6 { font-weight: 600; }
                 <button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
                 <button class="btn btn-danger" id="delAllPosConfirm">
                     <i class="fa fa-trash"></i> Delete All POs
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ============================================================
+     DELETE ALL PRODUCTS (PASSWORD GATE) MODAL
+     ============================================================ -->
+<div class="modal fade" id="deleteAllProductsModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-danger">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title"><i class="fa fa-triangle-exclamation"></i> Delete All Products</h5>
+                <button class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p class="mb-2">
+                    This will delete <strong>every product</strong> and the entire <strong>Price Sheet</strong>
+                    (distributor programs, retail pricing) for the year
+                    <strong><span id="delAllProdYear"></span></strong>. Other years are not affected.
+                </p>
+                <p class="text-muted small mb-3">
+                    Suppliers, POs, Receipts, Rebate Checks, and Settings are kept. But note: POs that
+                    reference deleted products will show those line items as orphaned.
+                </p>
+                <div class="alert alert-danger small mb-3" id="delAllProdCount"></div>
+                <label class="form-label small-label">Enter password to confirm:</label>
+                <input type="password" class="form-control" id="delAllProdPwd" placeholder="Password" autocomplete="off">
+                <div class="text-danger small mt-1" id="delAllProdError" style="display:none;">Incorrect password.</div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button class="btn btn-danger" id="delAllProdConfirm">
+                    <i class="fa fa-trash"></i> Delete All Products
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ============================================================
+     QUICK REBATE EDIT MODAL
+     ============================================================ -->
+<div class="modal fade" id="quickEditModal" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title"><i class="fa fa-pencil"></i> Quick Edit &mdash; <span id="qeProductTitle"></span></h5>
+                <button class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted small mb-3">
+                    Edit any number below and click <strong>Save All Changes</strong>. Updates flow through to the
+                    Dashboard, Price Sheet, and every PO using this product.
+                </p>
+
+                <!-- Product / Price Sheet fields -->
+                <div class="card mb-3">
+                    <div class="card-header bg-light"><strong>Price Sheet (applies to ALL POs with this product)</strong></div>
+                    <div class="card-body">
+                        <div class="row g-3">
+                            <div class="col-md-4">
+                                <label class="form-label small-label">Mfr Anchor ($/unit)</label>
+                                <input type="number" step="0.0001" class="form-control" id="qe_mfrAnchor">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label small-label">Mfr % (e.g. 0.14 = 14%)</label>
+                                <input type="number" step="0.0001" class="form-control" id="qe_mfrPct">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label small-label">Add'l Funds ($/unit)</label>
+                                <input type="number" step="0.01" class="form-control" id="qe_addFunds">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label small-label">Dist Redemption ($/unit)</label>
+                                <input type="number" step="0.0001" class="form-control" id="qe_distRedemption">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label small-label">Dist % (e.g. 0.14 = 14%)</label>
+                                <input type="number" step="0.0001" class="form-control" id="qe_distPct">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label small-label">Dec Cost ($/unit)</label>
+                                <input type="number" step="0.0001" class="form-control" id="qe_decCost">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- PO line fields -->
+                <div class="card mb-3">
+                    <div class="card-header bg-light"><strong>This PO Line</strong></div>
+                    <div class="card-body">
+                        <div class="row g-3">
+                            <div class="col-md-4">
+                                <label class="form-label small-label">Qty Ordered</label>
+                                <input type="number" step="0.01" class="form-control" id="qe_qtyOrdered">
+                            </div>
+                            <div class="col-md-8">
+                                <label class="form-label small-label">Source / Note</label>
+                                <input type="text" class="form-control" id="qe_source">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Receipts for this line -->
+                <div class="card mb-3" id="qe_receipts_card">
+                    <div class="card-header bg-light"><strong>Receipts for this Line</strong></div>
+                    <div class="card-body">
+                        <div id="qe_receipts_container">
+                            <p class="text-muted small mb-0">No receipts logged for this line yet. Use the Receive button on the PO to add one.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Live calc preview -->
+                <div class="alert alert-info" id="qe_calc_preview"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button class="btn btn-primary" id="qe_save_btn">
+                    <i class="fa fa-save"></i> Save All Changes
                 </button>
             </div>
         </div>
@@ -1329,12 +1481,12 @@ function save() {
 const FIREBASE_CONFIG = {
     // PASTE YOUR FIREBASE PROJECT CONFIG HERE
     // From Firebase Console -> Project Settings -> Your apps -> Web app -> config
-     apiKey: "AIzaSyCFfz-h1ZPoTm0BbAeannuiUyKpmvsJtG0",
-    authDomain: "tca-programs.firebaseapp.com",
-    projectId: "tca-programs",
-    storageBucket: "tca-programs.firebasestorage.app",
-    messagingSenderId: "237783905242",
-    appId: "1:237783905242:web:6947edc38e04dbe23cc6e3"
+    apiKey: "",
+    authDomain: "",
+    projectId: "",
+    storageBucket: "",
+    messagingSenderId: "",
+    appId: ""
 };
 
 let firebaseApp = null;
@@ -3553,7 +3705,7 @@ document.getElementById('inv_imp_confirm').addEventListener('click', function() 
         try {
             const stats = applyInvoiceImport(invImpParsed);
             bootstrap.Modal.getInstance(document.getElementById('invoiceImportModal')).hide();
-            toast(`Imported: ${stats.posCreated} new POs, ${stats.receiptsAdded} receipts, ${stats.linesAdded} lines${stats.linesSkipped > 0 ? ', ' + stats.linesSkipped + ' skipped' : ''}, ${stats.productsCreated} new products`, 'success');
+            toast(`Imported: ${stats.posCreated} new POs${stats.posReplaced ? ', ' + stats.posReplaced + ' replaced' : ''}, ${stats.receiptsAdded} receipts, ${stats.linesAdded} lines${stats.linesSkipped > 0 ? ', ' + stats.linesSkipped + ' skipped' : ''}, ${stats.productsCreated} new products`, 'success');
             invImpParsed = null;
             document.getElementById('inv_imp_file').value = '';
             document.getElementById('inv_imp_step_pick').style.display = 'block';
@@ -3573,7 +3725,8 @@ document.getElementById('inv_imp_confirm').addEventListener('click', function() 
 });
 
 function applyInvoiceImport(parsed) {
-    const stats = { posCreated: 0, receiptsAdded: 0, linesAdded: 0, linesSkipped: 0, productsCreated: 0 };
+    const stats = { posCreated: 0, posReplaced: 0, receiptsAdded: 0, linesAdded: 0, linesSkipped: 0, productsCreated: 0 };
+    const replaceExisting = document.getElementById('inv_imp_replace').checked;
 
     const distByName = new Map();
     state.suppliers.forEach(s => {
@@ -3602,8 +3755,9 @@ function applyInvoiceImport(parsed) {
     }
 
     parsed.invoicesByNum.forEach((inv, invNum) => {
-        // Resolve distributor + manufacturer for this invoice
-        const dist = inv.distributorName ? upsertSupplier(inv.distributorName, 'distributor') : null;
+        // NOTE: dist is no longer set per-invoice. Each line gets its OWN distributor
+        // from that line's Distributor cell. This prevents Meristem-on-row-1 from
+        // being applied to Van Diest rows etc.
 
         // Build the lines + receipt lineReceipts
         const newLines = [];
@@ -3614,6 +3768,9 @@ function applyInvoiceImport(parsed) {
                 stats.linesSkipped++;
                 return;
             }
+
+            // Per-line distributor: from THIS row's Distributor cell.
+            const lineDist = line.distributorName ? upsertSupplier(line.distributorName, 'distributor') : null;
 
             let product = null;
             if (line.decision === 'matched') {
@@ -3630,7 +3787,7 @@ function applyInvoiceImport(parsed) {
                     packageSize: line.pkgSize,
                     control: line.control,
                     manufacturerId: mfg ? mfg.id : null,
-                    distributorId: dist ? dist.id : null,
+                    distributorId: lineDist ? lineDist.id : null,
                     types: [],
                     lowNets: {
                         distRedemption: 0, distProgramPct: 0,
@@ -3649,14 +3806,22 @@ function applyInvoiceImport(parsed) {
             }
             if (!product) return;
 
-            // Distributor for this line: invoice's dist if available, else product's
-            const lineDistId = dist ? dist.id : (product.distributorId || null);
+            // Distributor for this line:
+            //   1. The line's own Distributor cell (lineDist)
+            //   2. Product's primary distributor (fallback)
+            const lineDistId = lineDist ? lineDist.id : (product.distributorId || null);
+
+            // Manufacturer for this line:
+            //   1. The line's own Manufacturer cell (lineMfg) — what was on the actual invoice
+            //   2. Product's stored manufacturer (fallback)
+            const lineMfg = line.manufacturerName ? upsertSupplier(line.manufacturerName, 'manufacturer') : null;
+            const lineMfgId = lineMfg ? lineMfg.id : (product.manufacturerId || null);
 
             const lineId = nextIds.line++;
             newLines.push({
                 id: lineId,
                 productId: product.id,
-                manufacturerId: product.manufacturerId,
+                manufacturerId: lineMfgId,
                 distributorId: lineDistId,
                 qtyOrdered: line.qty,
                 source: 'invoice ' + invNum
@@ -3694,8 +3859,19 @@ function applyInvoiceImport(parsed) {
             state.purchaseOrders.push(po);
             stats.posCreated++;
         } else {
-            // Append new lines (don't replace — preserve any existing lines/receipts on this PO)
-            po.lines = (po.lines || []).concat(newLines);
+            // PO with this INV- number already exists
+            if (replaceExisting && po.fromInvoice) {
+                // Replace lines + receipts from the file (the file IS the source of truth
+                // for auto-imported POs). Only touch fromInvoice POs to avoid clobbering
+                // manually-edited ones.
+                po.lines = newLines;
+                po.receipts = [];  // will be re-added below
+                po.date = inv.invoiceDate || po.date;
+                stats.posReplaced++;
+            } else {
+                // Append new lines (don't replace — preserve any existing lines/receipts)
+                po.lines = (po.lines || []).concat(newLines);
+            }
         }
 
         // Create a single receipt entry for this invoice
@@ -3867,14 +4043,30 @@ function renderPos() {
 
 function renderPoList() {
     const search = (document.getElementById('po_search').value || '').toLowerCase();
+    const rebateOnly = document.getElementById('po_rebate_only').checked;
+    const noRebateOnly = document.getElementById('po_no_rebate_only').checked;
     const pos = (state.purchaseOrders || []).filter(po => po.year === state.currentYear);
 
+    // Helper: does this line's product have a rebate program (Mfr or Dist > 0)?
+    function lineHasRebateProgram(line) {
+        const product = state.products.find(p => p.id === line.productId);
+        if (!product) return false;
+        const ln = product.lowNets || {};
+        const mfrAnchor = Number(ln.mfrAnchor) || 0;
+        const mfrPct = Number(ln.mfrProgramPct) || 0;
+        const addFunds = Number(ln.additionalFunds) || 0;
+        const hasMfr = (mfrAnchor > 0 && mfrPct > 0) || addFunds > 0;
+        const program = (state.distributorPrograms || []).find(dp =>
+            dp.productId === product.id && (dp.redemption || 0) > 0 && (dp.programPct || 0) > 0);
+        const hasDist = !!program;
+        return hasMfr || hasDist;
+    }
+
     // Apply search
-    const filtered = pos.filter(po => {
+    let filtered = pos.filter(po => {
         if (!search) return true;
         if (String(po.number || '').toLowerCase().includes(search)) return true;
         if (String(po.notes || '').toLowerCase().includes(search)) return true;
-        // search in lines
         return (po.lines || []).some(l => {
             const product = state.products.find(p => p.id === l.productId);
             if (product && (product.title.toLowerCase().includes(search) || (product.control || '').toLowerCase().includes(search))) return true;
@@ -3884,10 +4076,21 @@ function renderPoList() {
         });
     });
 
+    // Apply rebate filter
+    if (rebateOnly) {
+        filtered = filtered.filter(po => (po.lines || []).some(lineHasRebateProgram));
+    } else if (noRebateOnly) {
+        filtered = filtered.filter(po => (po.lines || []).some(l => !lineHasRebateProgram(l)));
+    }
+
     // Sort newest first
     filtered.sort((a, b) => (b.date || '').localeCompare(a.date || '') || b.id - a.id);
 
-    document.getElementById('po_count').textContent = `${filtered.length} of ${pos.length} POs`;
+    let filterLabel = '';
+    if (rebateOnly) filterLabel = ' (rebate lines only)';
+    else if (noRebateOnly) filterLabel = ' (NON-rebate lines only)';
+    document.getElementById('po_count').textContent =
+        `${filtered.length} of ${pos.length} POs${filterLabel}`;
 
     const container = document.getElementById('poListContainer');
     if (filtered.length === 0) {
@@ -3904,7 +4107,19 @@ function renderPoList() {
         let totalOrderedQty = 0;
         let totalReceivedQty = 0;
 
-        const lineRows = (po.lines || []).map(line => {
+        let visibleLines;
+        let hiddenReason = 'no rebate program';
+        if (rebateOnly) {
+            visibleLines = (po.lines || []).filter(lineHasRebateProgram);
+        } else if (noRebateOnly) {
+            visibleLines = (po.lines || []).filter(l => !lineHasRebateProgram(l));
+            hiddenReason = 'has rebate program';
+        } else {
+            visibleLines = po.lines || [];
+        }
+        const hiddenLineCount = (po.lines || []).length - visibleLines.length;
+
+        const lineRows = visibleLines.map(line => {
             const product = state.products.find(p => p.id === line.productId);
             const mfg = state.suppliers.find(s => s.id === line.manufacturerId);
             const dist = state.suppliers.find(s => s.id === line.distributorId);
@@ -3928,7 +4143,10 @@ function renderPoList() {
             else lineBadge = '<span class="badge bg-warning text-dark">partial</span>';
 
             return `<tr>
-                <td>${escapeHtml(product ? product.title : '(unknown product)')}<br>
+                <td><a href="javascript:void(0)" class="po-line-edit text-decoration-none" data-po-id="${po.id}" data-line-id="${line.id}" title="Click to edit rebate values for this line">
+                        <strong>${escapeHtml(product ? product.title : '(unknown product)')}</strong>
+                        <i class="fa fa-pencil text-muted ms-1" style="font-size:0.75em;"></i>
+                    </a><br>
                     <small class="text-muted">${escapeHtml(product ? product.packageSize || '' : '')} ${product && product.control ? '· ' + escapeHtml(product.control) : ''}</small></td>
                 <td>${escapeHtml(mfg ? mfg.name : '—')}</td>
                 <td>${escapeHtml(dist ? dist.name : '—')}${calc.mismatch ? ' <span class="badge bg-warning text-dark" title="PO distributor differs from Price Sheet primary distributor">≠ price sheet</span>' : ''}</td>
@@ -4045,6 +4263,9 @@ function renderPoList() {
                         <tbody>${lineRows || '<tr><td colspan="9" class="text-center text-muted small">No lines on this PO</td></tr>'}</tbody>
                     </table>
                 </div>
+                ${hiddenLineCount > 0 ? `<div class="px-3 py-1 small text-muted bg-light border-top">
+                    <i class="fa fa-eye-slash"></i> ${hiddenLineCount} line${hiddenLineCount === 1 ? '' : 's'} hidden (${hiddenReason})
+                </div>` : ''}
                 ${receiptList}
             </div>
         </div>`;
@@ -4062,9 +4283,19 @@ function renderPoList() {
         b.addEventListener('click', () => openReceiveModal(parseInt(b.dataset.poId, 10), parseInt(b.dataset.rcptId, 10))));
     document.querySelectorAll('.rcpt-delete-btn').forEach(b =>
         b.addEventListener('click', () => deleteReceipt(parseInt(b.dataset.poId, 10), parseInt(b.dataset.rcptId, 10))));
+    document.querySelectorAll('.po-line-edit').forEach(a =>
+        a.addEventListener('click', () => openQuickEditModal(parseInt(a.dataset.poId, 10), parseInt(a.dataset.lineId, 10))));
 }
 
 document.getElementById('po_search').addEventListener('input', renderPoList);
+document.getElementById('po_rebate_only').addEventListener('change', function() {
+    if (this.checked) document.getElementById('po_no_rebate_only').checked = false;
+    renderPoList();
+});
+document.getElementById('po_no_rebate_only').addEventListener('change', function() {
+    if (this.checked) document.getElementById('po_rebate_only').checked = false;
+    renderPoList();
+});
 document.getElementById('addPoBtn').addEventListener('click', () => openPoModal(null));
 
 /* ============================================================
@@ -4106,6 +4337,275 @@ document.getElementById('delAllPosConfirm').addEventListener('click', function()
     bootstrap.Modal.getInstance(document.getElementById('deleteAllPosModal')).hide();
     renderPoList();
     toast(`Deleted ${removed} PO${removed === 1 ? '' : 's'} for year ${state.currentYear}`, 'success');
+});
+
+/* ============================================================
+   DELETE ALL PRODUCTS + PRICE SHEET FOR CURRENT YEAR (password gated)
+   ============================================================ */
+document.getElementById('deleteAllProductsBtn').addEventListener('click', function() {
+    const productCount = (state.products || []).length;
+    const programCount = (state.distributorPrograms || []).length;
+    document.getElementById('delAllProdYear').textContent = state.currentYear;
+    document.getElementById('delAllProdCount').textContent =
+        `${productCount} product${productCount === 1 ? '' : 's'} and ${programCount} distributor program${programCount === 1 ? '' : 's'} will be permanently deleted.`;
+    document.getElementById('delAllProdPwd').value = '';
+    document.getElementById('delAllProdError').style.display = 'none';
+    new bootstrap.Modal(document.getElementById('deleteAllProductsModal')).show();
+});
+
+document.getElementById('delAllProdPwd').addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') {
+        e.preventDefault();
+        document.getElementById('delAllProdConfirm').click();
+    }
+});
+
+document.getElementById('delAllProdConfirm').addEventListener('click', function() {
+    const pwd = document.getElementById('delAllProdPwd').value;
+    if (pwd !== DELETE_ALL_POS_PASSWORD) {
+        document.getElementById('delAllProdError').style.display = 'block';
+        document.getElementById('delAllProdPwd').focus();
+        document.getElementById('delAllProdPwd').select();
+        return;
+    }
+    const removedProducts = (state.products || []).length;
+    const removedPrograms = (state.distributorPrograms || []).length;
+    state.products = [];
+    state.distributorPrograms = [];
+    save();
+    bootstrap.Modal.getInstance(document.getElementById('deleteAllProductsModal')).hide();
+    // Re-render whichever page is active
+    const active = document.querySelector('.page-view.active');
+    if (active) showPage(active.id.replace('page-', ''));
+    toast(`Deleted ${removedProducts} product${removedProducts === 1 ? '' : 's'} and ${removedPrograms} program${removedPrograms === 1 ? '' : 's'} for year ${state.currentYear}`, 'success');
+});
+
+/* ============================================================
+   QUICK REBATE EDIT MODAL — open from PO line product name
+   ============================================================
+   Lets the user edit any rebate-related number from a single modal,
+   then re-renders all views (PO list, Dashboard) on save.
+*/
+let qeContext = null;  // { poId, lineId }
+
+function openQuickEditModal(poId, lineId) {
+    const po = state.purchaseOrders.find(p => p.id === poId);
+    if (!po) { toast('PO not found', 'danger'); return; }
+    const line = (po.lines || []).find(l => l.id === lineId);
+    if (!line) { toast('Line not found', 'danger'); return; }
+    const product = state.products.find(p => p.id === line.productId);
+    if (!product) { toast('Product not found', 'danger'); return; }
+
+    qeContext = { poId, lineId };
+
+    // Title
+    document.getElementById('qeProductTitle').textContent =
+        product.title + (product.packageSize ? ' (' + product.packageSize + ')' : '');
+
+    // Product / Price Sheet fields
+    const ln = product.lowNets || {};
+    document.getElementById('qe_mfrAnchor').value = ln.mfrAnchor || 0;
+    document.getElementById('qe_mfrPct').value = ln.mfrProgramPct || 0;
+    document.getElementById('qe_addFunds').value = ln.additionalFunds || 0;
+    document.getElementById('qe_decCost').value = ln.distDecCost || 0;
+
+    // Distributor program for this product
+    const primary = (state.distributorPrograms || []).find(dp =>
+        dp.productId === product.id && dp.isPrimary);
+    const anyProgram = primary || (state.distributorPrograms || []).find(dp => dp.productId === product.id);
+    document.getElementById('qe_distRedemption').value = anyProgram ? (anyProgram.redemption || 0) : 0;
+    document.getElementById('qe_distPct').value = anyProgram ? (anyProgram.programPct || 0) : 0;
+
+    // PO line fields
+    document.getElementById('qe_qtyOrdered').value = line.qtyOrdered || 0;
+    document.getElementById('qe_source').value = line.source || '';
+
+    // Receipts for this line
+    const lineReceipts = [];
+    (po.receipts || []).forEach(rcpt => {
+        (rcpt.lineReceipts || []).forEach(lr => {
+            if (lr.lineId === lineId) {
+                lineReceipts.push({ rcpt, lr });
+            }
+        });
+    });
+    const container = document.getElementById('qe_receipts_container');
+    if (lineReceipts.length === 0) {
+        container.innerHTML = '<p class="text-muted small mb-0">No receipts logged for this line yet. Use the Receive button on the PO to add one.</p>';
+    } else {
+        container.innerHTML = `<div class="table-responsive">
+            <table class="table table-sm align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th style="min-width:110px;">Receipt</th>
+                        <th class="text-end" style="min-width:90px;">Qty</th>
+                        <th class="text-end" style="min-width:110px;">Line Cost ($)</th>
+                        <th class="text-end" style="min-width:110px;">Comp. Allow ($)</th>
+                    </tr>
+                </thead>
+                <tbody>${lineReceipts.map((entry, idx) => {
+                    const r = entry.rcpt, l = entry.lr;
+                    return `<tr data-qe-rcpt-id="${r.id}">
+                        <td><small>${escapeHtml(r.date || '')}<br>${r.bolNumber ? 'BOL: ' + escapeHtml(r.bolNumber) : ''}</small></td>
+                        <td><input type="number" step="0.01" class="form-control form-control-sm text-end qe-rcpt-qty"
+                                 data-rcpt-id="${r.id}" value="${l.qty || 0}"></td>
+                        <td><input type="number" step="0.01" class="form-control form-control-sm text-end qe-rcpt-cost"
+                                 data-rcpt-id="${r.id}" value="${l.lineCost || 0}"></td>
+                        <td><input type="number" step="0.01" class="form-control form-control-sm text-end qe-rcpt-ca"
+                                 data-rcpt-id="${r.id}" value="${l.competitiveAllowance || 0}"></td>
+                    </tr>`;
+                }).join('')}</tbody>
+            </table>
+        </div>`;
+    }
+
+    refreshQuickEditPreview();
+
+    // Re-bind live preview listeners to any number field
+    document.querySelectorAll('#quickEditModal input').forEach(inp => {
+        inp.removeEventListener('input', refreshQuickEditPreview);
+        inp.addEventListener('input', refreshQuickEditPreview);
+    });
+
+    new bootstrap.Modal(document.getElementById('quickEditModal')).show();
+}
+
+// Live calc preview at the bottom of the quick-edit modal.
+// Recalculates rebate $ as the user types, using the modal's current values
+// (NOT the saved state) so they see the effect of changes before committing.
+function refreshQuickEditPreview() {
+    if (!qeContext) return;
+    const po = state.purchaseOrders.find(p => p.id === qeContext.poId);
+    const line = po ? po.lines.find(l => l.id === qeContext.lineId) : null;
+    if (!line) return;
+
+    const mfrAnchor = parseFloat(document.getElementById('qe_mfrAnchor').value) || 0;
+    const mfrPct = parseFloat(document.getElementById('qe_mfrPct').value) || 0;
+    const addFunds = parseFloat(document.getElementById('qe_addFunds').value) || 0;
+    const distRedemption = parseFloat(document.getElementById('qe_distRedemption').value) || 0;
+    const distPct = parseFloat(document.getElementById('qe_distPct').value) || 0;
+    const qtyOrdered = parseFloat(document.getElementById('qe_qtyOrdered').value) || 0;
+
+    const mfrRebatePerUnit = mfrAnchor * mfrPct + addFunds;
+    const distRebatePerUnit = distRedemption * distPct;
+
+    // Sum receipts from the modal's current inputs
+    let earnedMfr = 0, earnedDist = 0, receivedQty = 0;
+    document.querySelectorAll('#qe_receipts_container tbody tr').forEach(tr => {
+        const qty = parseFloat(tr.querySelector('.qe-rcpt-qty')?.value || 0) || 0;
+        const lineCost = parseFloat(tr.querySelector('.qe-rcpt-cost')?.value || 0) || 0;
+        const ca = parseFloat(tr.querySelector('.qe-rcpt-ca')?.value || 0) || 0;
+        receivedQty += qty;
+        earnedMfr += mfrRebatePerUnit * qty;
+        if (qty !== 0 && lineCost !== 0) {
+            earnedDist += (lineCost - ca) * distPct;
+        } else if (qty !== 0) {
+            earnedDist += distRebatePerUnit * qty;
+        }
+    });
+
+    const pendingQty = qtyOrdered - receivedQty;
+    const pendingMfr = pendingQty > 0 ? mfrRebatePerUnit * pendingQty : 0;
+    const pendingDist = pendingQty > 0 ? distRebatePerUnit * pendingQty : 0;
+
+    const totalEarned = earnedMfr + earnedDist;
+    const totalPending = pendingMfr + pendingDist;
+
+    document.getElementById('qe_calc_preview').innerHTML = `
+        <div class="row text-center small">
+            <div class="col-md-3">
+                <div class="text-muted">Mfr Rebate/Unit</div>
+                <strong>${fmt.usd(mfrRebatePerUnit)}</strong>
+            </div>
+            <div class="col-md-3">
+                <div class="text-muted">Dist Rebate/Unit</div>
+                <strong>${fmt.usd(distRebatePerUnit)}</strong>
+            </div>
+            <div class="col-md-3">
+                <div class="text-muted">Earned (received)</div>
+                <strong class="text-success">${fmt.usd(totalEarned)}</strong>
+                <div class="text-muted" style="font-size:0.8em;">Mfr ${fmt.usd(earnedMfr)} + Dist ${fmt.usd(earnedDist)}</div>
+            </div>
+            <div class="col-md-3">
+                <div class="text-muted">Pending (un-received)</div>
+                <strong class="text-secondary">${fmt.usd(totalPending)}</strong>
+                <div class="text-muted" style="font-size:0.8em;">Mfr ${fmt.usd(pendingMfr)} + Dist ${fmt.usd(pendingDist)}</div>
+            </div>
+        </div>`;
+}
+
+document.getElementById('qe_save_btn').addEventListener('click', function() {
+    if (!qeContext) return;
+    const po = state.purchaseOrders.find(p => p.id === qeContext.poId);
+    if (!po) return;
+    const line = po.lines.find(l => l.id === qeContext.lineId);
+    if (!line) return;
+    const product = state.products.find(p => p.id === line.productId);
+    if (!product) return;
+
+    // Apply Price Sheet changes
+    if (!product.lowNets) product.lowNets = {};
+    product.lowNets.mfrAnchor = parseFloat(document.getElementById('qe_mfrAnchor').value) || 0;
+    product.lowNets.mfrProgramPct = parseFloat(document.getElementById('qe_mfrPct').value) || 0;
+    product.lowNets.additionalFunds = parseFloat(document.getElementById('qe_addFunds').value) || 0;
+    product.lowNets.distDecCost = parseFloat(document.getElementById('qe_decCost').value) || 0;
+    const newRedemption = parseFloat(document.getElementById('qe_distRedemption').value) || 0;
+    const newDistPct = parseFloat(document.getElementById('qe_distPct').value) || 0;
+    product.lowNets.distRedemption = newRedemption;
+    product.lowNets.distProgramPct = newDistPct;
+
+    // Upsert dist program: prefer line's distributor, else product's, else first existing program
+    let distId = line.distributorId || product.distributorId;
+    let program = (state.distributorPrograms || []).find(dp => dp.productId === product.id && dp.isPrimary);
+    if (!program) program = (state.distributorPrograms || []).find(dp => dp.productId === product.id);
+    if (program) {
+        program.redemption = newRedemption;
+        program.programPct = newDistPct;
+        program.isPrimary = true;
+        // Demote others for this product
+        (state.distributorPrograms || []).forEach(dp => {
+            if (dp.productId === product.id && dp !== program) dp.isPrimary = false;
+        });
+    } else if (distId && (newRedemption > 0 || newDistPct > 0)) {
+        state.distributorPrograms.push({
+            id: nextIds.program++,
+            productId: product.id,
+            distributorId: distId,
+            redemption: newRedemption, programPct: newDistPct,
+            isPrimary: true, source: 'quick-edit'
+        });
+    }
+
+    // Apply PO line changes
+    line.qtyOrdered = parseFloat(document.getElementById('qe_qtyOrdered').value) || 0;
+    line.source = document.getElementById('qe_source').value || '';
+
+    // Apply receipt changes
+    document.querySelectorAll('#qe_receipts_container tbody tr').forEach(tr => {
+        const rcptId = parseInt(tr.dataset.qeRcptId, 10);
+        const rcpt = po.receipts.find(r => r.id === rcptId);
+        if (!rcpt) return;
+        const lr = (rcpt.lineReceipts || []).find(l => l.lineId === line.id);
+        if (!lr) return;
+        const qty = parseFloat(tr.querySelector('.qe-rcpt-qty').value) || 0;
+        const lineCost = parseFloat(tr.querySelector('.qe-rcpt-cost').value) || 0;
+        const ca = parseFloat(tr.querySelector('.qe-rcpt-ca').value) || 0;
+        lr.qty = qty;
+        lr.lineCost = lineCost;
+        lr.competitiveAllowance = ca;
+        lr.netCost = lineCost - ca;
+        lr.unitCost = qty !== 0 ? lineCost / qty : 0;
+        lr.netUnitCost = qty !== 0 ? (lineCost - ca) / qty : 0;
+    });
+
+    save();
+    bootstrap.Modal.getInstance(document.getElementById('quickEditModal')).hide();
+    qeContext = null;
+    renderPoList();
+    // Refresh dashboard if it's the active page
+    const active = document.querySelector('.page-view.active');
+    if (active && active.id === 'page-dashboard') renderDashboard();
+    toast('Changes saved', 'success');
 });
 
 /* ============================================================
