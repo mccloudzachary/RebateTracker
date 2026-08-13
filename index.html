@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en-US">
 <head>
@@ -202,6 +203,9 @@ h1, h2, h3, h4, h5, h6 { font-weight: 600; }
                 </div>
             </div>
         </div>
+
+        <!-- Items to work on before numbers are final -->
+        <div id="dashToFinalize" class="mb-4"></div>
 
         <!-- Per-supplier breakdowns -->
         <div class="row g-3 mb-4">
@@ -1209,21 +1213,26 @@ h1, h2, h3, h4, h5, h6 { font-weight: 600; }
                 <div class="table-responsive">
                     <table class="table table-sm align-middle">
                         <thead class="table-light">
-                            <tr>
-                                <th style="min-width:260px;">Product</th>
-                                <th style="min-width:160px;">Manufacturer</th>
-                                <th style="min-width:160px;">Distributor</th>
-                                <th class="text-end" style="width:100px;">Quantity</th>
-                                <th class="text-end" style="width:130px;"><em>Dist Rebate</em></th>
-                                <th class="text-end" style="width:130px;"><em>Mfr Rebate</em></th>
-                                <th class="text-end" style="width:130px;"><em>Total Rebate</em></th>
-                                <th style="width:50px;"></th>
+    <tr>
+        <th style="min-width:260px;">Product</th>
+        <th style="min-width:160px;">Manufacturer</th>
+        <th style="min-width:160px;">Distributor</th>
+        <th class="text-end" style="width:90px;">Quantity</th>
+        <th class="text-end" style="width:110px;">Dec Cost</th>
+        <th class="text-end" style="width:90px;">Dist %</th>
+        <th class="text-end" style="width:90px;">Mfr %</th>
+        <th class="text-end" style="width:120px;"><em>Dist Rebate</em></th>
+        <th class="text-end" style="width:120px;"><em>Mfr Rebate</em></th>
+        <th class="text-end" style="width:120px;"><em>Total Rebate</em></th>
+        <th style="width:50px;"></th>
+    </tr>
+</thead>
                             </tr>
                         </thead>
                         <tbody id="po_lines_tbody"></tbody>
                         <tfoot class="table-light">
                             <tr>
-                                <th colspan="6" class="text-end">Total rebates owed on this PO:</th>
+                                <th colspan="9" class="text-end">Total rebates owed on this PO:</th>
                                 <th class="text-end fw-bold text-primary" id="po_total_rebate">$0.00</th>
                                 <th></th>
                             </tr>
@@ -4213,6 +4222,33 @@ function computePoLineRebate(line, po) {
     };
 }
 
+// --- Rebate classification + manual "should have rebate" flag ---
+function hasRealRebateProgram(line) {
+    const product = state.products.find(p => p.id === line.productId);
+    if (!product) return false;
+    const ln = product.lowNets || {};
+    const hasMfr = ((Number(ln.mfrAnchor) || 0) > 0 && (Number(ln.mfrProgramPct) || 0) > 0)
+                || (Number(ln.additionalFunds) || 0) > 0;
+    const hasDist = (state.distributorPrograms || []).some(dp =>
+        dp.productId === product.id && (dp.redemption || 0) > 0 && (dp.programPct || 0) > 0);
+    return hasMfr || hasDist;
+}
+function countsForRebate(line) {
+    return hasRealRebateProgram(line) || !!line.forceRebate;
+}
+function toggleForceRebate(poId, lineId) {
+    const po = (state.purchaseOrders || []).find(p => p.id === poId);
+    if (!po) return;
+    const line = (po.lines || []).find(l => l.id === lineId);
+    if (!line) return;
+    line.forceRebate = !line.forceRebate;
+    save();
+    renderPoList();
+    const active = document.querySelector('.page-view.active');
+    if (active && active.id === 'page-dashboard') renderDashboard();
+    toast(line.forceRebate ? 'Flagged as should-have-rebate' : 'Removed should-have-rebate flag', 'success');
+}
+
 function renderPos() {
     document.getElementById('poYearLabel').textContent = state.currentYear;
     renderPoList();
@@ -4255,9 +4291,9 @@ function renderPoList() {
 
     // Apply rebate filter
     if (rebateOnly) {
-        filtered = filtered.filter(po => (po.lines || []).some(lineHasRebateProgram));
+        filtered = filtered.filter(po => (po.lines || []).some(countsForRebate));
     } else if (noRebateOnly) {
-        filtered = filtered.filter(po => (po.lines || []).some(l => !lineHasRebateProgram(l)));
+        filtered = filtered.filter(po => (po.lines || []).some(l => !countsForRebate(l)));
     }
 
     // Sort newest first
@@ -4287,9 +4323,9 @@ function renderPoList() {
         let visibleLines;
         let hiddenReason = 'no rebate program';
         if (rebateOnly) {
-            visibleLines = (po.lines || []).filter(lineHasRebateProgram);
+            visibleLines = (po.lines || []).filter(countsForRebate);
         } else if (noRebateOnly) {
-            visibleLines = (po.lines || []).filter(l => !lineHasRebateProgram(l));
+            visibleLines = (po.lines || []).filter(l => !countsForRebate(l));
             hiddenReason = 'has rebate program';
         } else {
             visibleLines = po.lines || [];
@@ -4305,6 +4341,11 @@ function renderPoList() {
             const recvQty = receivedForLine(po, line.id);
             const pendingQty = orderedQty - recvQty;
             totalOrderedQty += orderedQty;
+
+            const naturalRebate = hasRealRebateProgram(line);
+            const rebateFlagHtml = naturalRebate ? '' : (line.forceRebate
+                ? `<a href="javascript:void(0)" class="po-rebate-flag badge bg-warning text-dark text-decoration-none" data-po-id="${po.id}" data-line-id="${line.id}" title="Flagged as should-have-rebate. Click to remove.">&#9733; should have rebate</a>`
+                : `<a href="javascript:void(0)" class="po-rebate-flag small text-warning text-decoration-none" data-po-id="${po.id}" data-line-id="${line.id}" title="No rebate program on this line. Click to flag it as should-have-rebate."><i class="fa fa-flag"></i> mark should-have-rebate</a>`);
             totalReceivedQty += recvQty;
 
             const earned = calc.earnedDist + calc.earnedMfr;
@@ -4324,7 +4365,7 @@ function renderPoList() {
                         <strong>${escapeHtml(product ? product.title : '(unknown product)')}</strong>
                         <i class="fa fa-pencil text-muted ms-1" style="font-size:0.75em;"></i>
                     </a><br>
-                    <small class="text-muted">${escapeHtml(product ? product.packageSize || '' : '')} ${product && product.control ? '· ' + escapeHtml(product.control) : ''}</small></td>
+                    <small class="text-muted">${escapeHtml(product ? product.packageSize || '' : '')} ${product && product.control ? '· ' + escapeHtml(product.control) : ''}</small>${rebateFlagHtml ? '<br>' + rebateFlagHtml : ''}</td>
                 <td>${escapeHtml(mfg ? mfg.name : '—')}</td>
                 <td>${escapeHtml(dist ? dist.name : '—')}${calc.mismatch ? ' <span class="badge bg-warning text-dark" title="PO distributor differs from Price Sheet primary distributor">≠ price sheet</span>' : ''}</td>
                 <td class="text-end">${fmt.qty(orderedQty)}</td>
@@ -4462,6 +4503,8 @@ function renderPoList() {
         b.addEventListener('click', () => deleteReceipt(parseInt(b.dataset.poId, 10), parseInt(b.dataset.rcptId, 10))));
     document.querySelectorAll('.po-line-edit').forEach(a =>
         a.addEventListener('click', () => openQuickEditModal(parseInt(a.dataset.poId, 10), parseInt(a.dataset.lineId, 10))));
+    document.querySelectorAll('.po-rebate-flag').forEach(a =>
+        a.addEventListener('click', () => toggleForceRebate(parseInt(a.dataset.poId, 10), parseInt(a.dataset.lineId, 10))));
 }
 
 document.getElementById('po_search').addEventListener('input', renderPoList);
@@ -4816,7 +4859,8 @@ function openPoModal(poId) {
             productId: l.productId,
             manufacturerId: l.manufacturerId,
             distributorId: l.distributorId,
-            qtyOrdered: l.qtyOrdered || 0
+            qtyOrdered: l.qtyOrdered || 0,
+            forceRebate: l.forceRebate
         }));
         if (poWorkingLines.length === 0) {
             poWorkingLines = [{ tempId: 1, productId: null, manufacturerId: null, distributorId: null, qtyOrdered: 0 }];
@@ -4827,6 +4871,61 @@ function openPoModal(poId) {
     new bootstrap.Modal(document.getElementById('poModal')).show();
 }
 
+function updatePoLineRebatePreview(idx) {
+    const line = poWorkingLines[idx];
+    const row = document.querySelector(`#po_lines_tbody tr[data-idx="${idx}"]`);
+    if (!row) return;
+
+    const product = line.productId ? state.products.find(p => p.id === line.productId) : null;
+    let sheetDecCost = 0, sheetDistPct = 0, sheetMfrPct = 0;
+    if (product) {
+        const ln = product.lowNets || {};
+        sheetMfrPct = Number(ln.mfrProgramPct) || 0;
+        const productPrograms = (state.distributorPrograms || []).filter(dp => dp.productId === product.id);
+        const filled = productPrograms.filter(dp => (dp.redemption || 0) > 0 && (dp.programPct || 0) > 0);
+        const primary = filled.find(dp => dp.isPrimary) || filled[0]
+                     || productPrograms.find(dp => dp.isPrimary) || productPrograms[0] || null;
+        if (primary) {
+            sheetDecCost = Number(primary.redemption) || 0;
+            sheetDistPct = Number(primary.programPct) || 0;
+        }
+        if (!sheetDecCost) sheetDecCost = Number(ln.distDecCost) || 0;
+    }
+
+    const decCost = (line.decCostOverride != null) ? line.decCostOverride : sheetDecCost;
+    const distPct = (line.distPctOverride != null) ? line.distPctOverride : sheetDistPct;
+    const mfrPct  = (line.mfrPctOverride  != null) ? line.mfrPctOverride  : sheetMfrPct;
+    const qty = Number(line.qtyOrdered) || 0;
+
+    const distRebate = decCost * distPct * qty;
+    const mfrRebate  = decCost * mfrPct  * qty;
+
+    // Update the 3 rebate cells in this row (last 4 cells: Dist, Mfr, Total, X button)
+    const cells = row.querySelectorAll('td');
+    cells[cells.length - 4].textContent = fmt.usd(distRebate);
+    cells[cells.length - 3].textContent = fmt.usd(mfrRebate);
+    cells[cells.length - 2].textContent = fmt.usd(distRebate + mfrRebate);
+
+    // Update PO total
+    let total = 0;
+    poWorkingLines.forEach((l, i) => {
+        const p = l.productId ? state.products.find(pp => pp.id === l.productId) : null;
+        if (!p) return;
+        const pln = p.lowNets || {};
+        let sDec = 0, sDist = 0, sMfr = Number(pln.mfrProgramPct) || 0;
+        const progs = (state.distributorPrograms || []).filter(dp => dp.productId === p.id);
+        const f = progs.filter(dp => (dp.redemption || 0) > 0 && (dp.programPct || 0) > 0);
+        const pr = f.find(dp => dp.isPrimary) || f[0] || progs.find(dp => dp.isPrimary) || progs[0] || null;
+        if (pr) { sDec = Number(pr.redemption) || 0; sDist = Number(pr.programPct) || 0; }
+        if (!sDec) sDec = Number(pln.distDecCost) || 0;
+        const dc = (l.decCostOverride != null) ? l.decCostOverride : sDec;
+        const dp_ = (l.distPctOverride != null) ? l.distPctOverride : sDist;
+        const mp = (l.mfrPctOverride != null) ? l.mfrPctOverride : sMfr;
+        const q = Number(l.qtyOrdered) || 0;
+        total += (dc * dp_ * q) + (dc * mp * q);
+    });
+    document.getElementById('po_total_rebate').textContent = fmt.usd(total);
+}
 function renderPoLines() {
     const tbody = document.getElementById('po_lines_tbody');
     let totalRebate = 0;
@@ -4836,19 +4935,40 @@ function renderPoLines() {
         const mfg = line.manufacturerId ? state.suppliers.find(s => s.id === line.manufacturerId) : null;
         const dist = line.distributorId ? state.suppliers.find(s => s.id === line.distributorId) : null;
 
-        // Live rebate preview
-        let distRebate = 0, mfrRebate = 0, mismatch = false;
+        // Look up price sheet defaults for this product (used as placeholders + fallback)
+        let sheetDecCost = 0, sheetDistPct = 0, sheetMfrPct = 0;
+        let mismatch = false;
         if (product) {
-            const calc = computePoLineRebate({
-                productId: line.productId,
-                distributorId: line.distributorId,
-                qtyOrdered: line.qtyOrdered
-            });
-            distRebate = calc.distRebate;
-            mfrRebate = calc.mfrRebate;
-            mismatch = calc.mismatch;
-            totalRebate += calc.total;
+            const ln = product.lowNets || {};
+            sheetMfrPct = Number(ln.mfrProgramPct) || 0;
+
+            const productPrograms = (state.distributorPrograms || []).filter(dp => dp.productId === product.id);
+            const filled = productPrograms.filter(dp => (dp.redemption || 0) > 0 && (dp.programPct || 0) > 0);
+            const primary = filled.find(dp => dp.isPrimary)
+                         || filled[0]
+                         || productPrograms.find(dp => dp.isPrimary)
+                         || productPrograms[0]
+                         || null;
+            if (primary) {
+                sheetDecCost = Number(primary.redemption) || 0;
+                sheetDistPct = Number(primary.programPct) || 0;
+                mismatch = line.distributorId && primary.distributorId !== line.distributorId;
+            }
+            // Fallback: if no program-based Dec Cost, use the product's master Dec Cost
+            if (!sheetDecCost) {
+                sheetDecCost = Number(ln.distDecCost) || 0;
+            }
         }
+
+        // Effective values: use line override if set, else price sheet default
+        const decCost  = (line.decCostOverride  != null) ? line.decCostOverride  : sheetDecCost;
+        const distPct  = (line.distPctOverride  != null) ? line.distPctOverride  : sheetDistPct;
+        const mfrPct   = (line.mfrPctOverride   != null) ? line.mfrPctOverride   : sheetMfrPct;
+
+        const qty = Number(line.qtyOrdered) || 0;
+        const distRebate = decCost * distPct * qty;
+        const mfrRebate  = decCost * mfrPct  * qty;
+        totalRebate += distRebate + mfrRebate;
 
         return `<tr data-idx="${idx}">
             <td>
@@ -4874,6 +4994,24 @@ function renderPoLines() {
             <td>
                 <input type="number" step="0.01" class="form-control form-control-sm text-end po-qty-input"
                        data-idx="${idx}" value="${line.qtyOrdered || ''}">
+            </td>
+            <td>
+                <input type="number" step="0.01" class="form-control form-control-sm text-end po-deccost-input"
+                       data-idx="${idx}" value="${product ? decCost.toFixed(2) : ''}"
+                       placeholder="${sheetDecCost.toFixed(2)}"
+                       ${line.decCostOverride != null ? 'title="Overridden for this PO line"' : ''}>
+            </td>
+            <td>
+                <input type="number" step="0.0001" class="form-control form-control-sm text-end po-distpct-input"
+                       data-idx="${idx}" value="${product ? (distPct * 100).toFixed(2) : ''}"
+                       placeholder="${(sheetDistPct * 100).toFixed(2)}"
+                       ${line.distPctOverride != null ? 'title="Overridden for this PO line"' : ''}>
+            </td>
+            <td>
+                <input type="number" step="0.0001" class="form-control form-control-sm text-end po-mfrpct-input"
+                       data-idx="${idx}" value="${product ? (mfrPct * 100).toFixed(2) : ''}"
+                       placeholder="${(sheetMfrPct * 100).toFixed(2)}"
+                       ${line.mfrPctOverride != null ? 'title="Overridden for this PO line"' : ''}>
             </td>
             <td class="text-end">${fmt.usd(distRebate)}</td>
             <td class="text-end">${fmt.usd(mfrRebate)}</td>
@@ -5012,7 +5150,35 @@ function wirePoLineEvents() {
             document.getElementById('po_total_rebate').textContent = fmt.usd(total);
         });
     });
+// Dec Cost override
+    document.querySelectorAll('.po-deccost-input').forEach(inp => {
+        inp.addEventListener('input', function() {
+            const idx = parseInt(this.dataset.idx, 10);
+            const val = this.value.trim();
+            poWorkingLines[idx].decCostOverride = (val === '') ? null : parseFloat(val);
+            updatePoLineRebatePreview(idx);
+        });
+    });
 
+    // Dist % override (user enters whole percent, we store decimal)
+    document.querySelectorAll('.po-distpct-input').forEach(inp => {
+        inp.addEventListener('input', function() {
+            const idx = parseInt(this.dataset.idx, 10);
+            const val = this.value.trim();
+            poWorkingLines[idx].distPctOverride = (val === '') ? null : (parseFloat(val) / 100);
+            updatePoLineRebatePreview(idx);
+        });
+    });
+
+    // Mfr % override (user enters whole percent, we store decimal)
+    document.querySelectorAll('.po-mfrpct-input').forEach(inp => {
+        inp.addEventListener('input', function() {
+            const idx = parseInt(this.dataset.idx, 10);
+            const val = this.value.trim();
+            poWorkingLines[idx].mfrPctOverride = (val === '') ? null : (parseFloat(val) / 100);
+            updatePoLineRebatePreview(idx);
+        });
+    });
     document.querySelectorAll('.po-remove-line').forEach(btn => {
         btn.addEventListener('click', function() {
             const idx = parseInt(this.dataset.idx, 10);
@@ -5056,7 +5222,8 @@ document.getElementById('po_save_btn').addEventListener('click', function() {
         productId: l.productId,
         manufacturerId: l.manufacturerId,
         distributorId: l.distributorId,
-        qtyOrdered: Number(l.qtyOrdered) || 0
+        qtyOrdered: Number(l.qtyOrdered) || 0,
+        forceRebate: l.forceRebate || false
     }));
 
     if (isNew) {
@@ -5607,9 +5774,79 @@ function renderDashboard() {
     document.getElementById('dashVarianceNet').textContent = fmt.usd(data.netVariance);
     document.getElementById('dashVarianceNet').className = data.netVariance > 0.005 ? 'text-danger' : data.netVariance < -0.005 ? 'text-success' : '';
     renderVarianceTable(data.variances);
+    renderToFinalize();
 }
 
 // Compute all dashboard data in one pass over POs.
+// Lines still blocking a final rebate number for the current year.
+function renderToFinalize() {
+    const host = document.getElementById('dashToFinalize');
+    if (!host) return;
+    const pos = (state.purchaseOrders || []).filter(po => po.year === state.currentYear);
+    const items = [];
+    pos.forEach(po => {
+        (po.lines || []).forEach(line => {
+            const product = state.products.find(p => p.id === line.productId);
+            if (!product) return;
+            if (!countsForRebate(line)) return; // only rebate lines affect final numbers
+            const calc = computePoLineRebate(line, po);
+            const orderedQty = Number(line.qtyOrdered) || 0;
+            const recvQty = receivedForLine(po, line.id);
+            const pendingQty = orderedQty - recvQty;
+            const noRates = (calc.distRebatePerUnit || 0) === 0 && (calc.mfrRebatePerUnit || 0) === 0;
+            const reasons = [];
+            if (line.forceRebate && noRates) reasons.push('Flagged should-have-rebate — enter rebate values');
+            else if (noRates) reasons.push('No rebate rates entered');
+            if (pendingQty > 0.0001) reasons.push(`${fmt.qty(pendingQty)} of ${fmt.qty(orderedQty)} not yet received`);
+            if (calc.mismatch) reasons.push('PO distributor ≠ price sheet');
+            if (reasons.length === 0) return;
+            items.push({
+                poId: po.id, lineId: line.id,
+                poNum: po.number || '#' + po.id,
+                productName: product.title + (product.packageSize ? ' (' + product.packageSize + ')' : ''),
+                reasons
+            });
+        });
+    });
+
+    if (items.length === 0) {
+        host.innerHTML = `<div class="card border-success"><div class="card-body d-flex align-items-center">
+            <i class="fa fa-check-circle text-success fa-lg me-2"></i>
+            <span class="text-success fw-bold">All caught up — nothing blocking final numbers for ${state.currentYear}.</span>
+        </div></div>`;
+        return;
+    }
+
+    const rows = items.map(it => `
+        <tr class="dash-finalize-row" data-po-id="${it.poId}" data-line-id="${it.lineId}" style="cursor:pointer;" title="Click to open and fix this line">
+            <td><strong>${escapeHtml(it.poNum)}</strong></td>
+            <td>${escapeHtml(it.productName)}</td>
+            <td>${it.reasons.map(r => `<span class="badge bg-warning text-dark me-1 mb-1">${escapeHtml(r)}</span>`).join('')}</td>
+            <td class="text-end"><i class="fa fa-pencil text-muted"></i></td>
+        </tr>`).join('');
+
+    host.innerHTML = `<div class="card border-warning">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <strong><i class="fa fa-triangle-exclamation text-warning"></i> To Finalize — items to work on for final numbers</strong>
+            <span class="badge bg-warning text-dark">${items.length} item${items.length === 1 ? '' : 's'}</span>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-sm table-hover mb-0 align-middle">
+                <thead class="table-light"><tr>
+                    <th style="min-width:90px;">PO</th>
+                    <th>Product</th>
+                    <th>What's needed</th>
+                    <th style="width:30px;"></th>
+                </tr></thead>
+                <tbody>${rows}</tbody>
+            </table>
+        </div>
+    </div>`;
+
+    host.querySelectorAll('.dash-finalize-row').forEach(tr =>
+        tr.addEventListener('click', () => openQuickEditModal(parseInt(tr.dataset.poId, 10), parseInt(tr.dataset.lineId, 10))));
+}
+
 function computeDashboardData() {
     const result = {
         earnedDist: 0, earnedMfr: 0,
