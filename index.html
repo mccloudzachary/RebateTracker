@@ -1,4 +1,5 @@
 
+
 <!DOCTYPE html>
 <html lang="en-US">
 <head>
@@ -134,6 +135,7 @@ h1, h2, h3, h4, h5, h6 { font-weight: 600; }
                     <li class="nav-item"><a class="nav-link" data-page="price-sheet">Price Sheet</a></li>
                     <li class="nav-item"><a class="nav-link" data-page="pos">POs</a></li>
                     <li class="nav-item"><a class="nav-link" data-page="checks">Rebate Checks</a></li>
+                    <li class="nav-item"><a class="nav-link" data-page="finalize">Finalize</a></li>
                     <li class="nav-item"><a class="nav-link" data-page="settings">Settings</a></li>
                 </ul>
                 <form class="ms-auto d-flex align-items-center gap-2 flex-wrap" onsubmit="event.preventDefault();">
@@ -205,7 +207,6 @@ h1, h2, h3, h4, h5, h6 { font-weight: 600; }
         </div>
 
         <!-- Items to work on before numbers are final -->
-        <div id="dashToFinalize" class="mb-4"></div>
 
         <!-- Per-supplier breakdowns -->
         <div class="row g-3 mb-4">
@@ -590,6 +591,114 @@ h1, h2, h3, h4, h5, h6 { font-weight: 600; }
                 </table>
             </div>
         </div>
+    </div>
+</section>
+
+<!-- ============================================================
+     FINALIZE — per-line program summary + Excel export
+     ============================================================ -->
+<section id="page-finalize" class="page-view">
+    <div class="container-fluid">
+        <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+            <h1 class="mb-0">Finalize <small class="text-muted fs-6"><span id="finYearLabel">2026</span></small></h1>
+            <button class="btn btn-success" id="fin_export_btn">
+                <i class="fa fa-file-excel"></i> Export to Excel
+            </button>
+        </div>
+
+        <div class="row g-3 mb-3">
+            <div class="col-md-3 col-6">
+                <div class="card border-secondary">
+                    <div class="card-body py-2">
+                        <div class="text-uppercase small text-muted">Expected Cost (Dec)</div>
+                        <div class="h5 mb-0" id="fin_sum_expcost">$0.00</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3 col-6">
+                <div class="card border-primary">
+                    <div class="card-body py-2">
+                        <div class="text-uppercase small text-muted">Total Rebates</div>
+                        <div class="h5 mb-0 text-primary" id="fin_sum_rebates">$0.00</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3 col-6">
+                <div class="card border-info">
+                    <div class="card-body py-2">
+                        <div class="text-uppercase small text-muted">Procurement Fees (2%)</div>
+                        <div class="h5 mb-0 text-info" id="fin_sum_fees">$0.00</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3 col-6">
+                <div class="card border-success">
+                    <div class="card-body py-2">
+                        <div class="text-uppercase small text-muted">Total Captured</div>
+                        <div class="h5 mb-0 text-success" id="fin_sum_captured">$0.00</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card mb-3">
+            <div class="card-body py-2">
+                <div class="row g-2 align-items-end">
+                    <div class="col-md-4">
+                        <label class="form-label small-label">Search (product / control / PO)</label>
+                        <input class="form-control form-control-sm" type="text" id="fin_search">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small-label">Manufacturer</label>
+                        <select class="form-select form-select-sm" id="fin_mfg"><option value="">All</option></select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small-label">Distributor</label>
+                        <select class="form-select form-select-sm" id="fin_dist"><option value="">All</option></select>
+                    </div>
+                    <div class="col-md-2">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="fin_programmed_only">
+                            <label class="form-check-label small" for="fin_programmed_only">Programmed only</label>
+                        </div>
+                        <span class="text-muted small d-block" id="fin_count"></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="table-responsive">
+                <table class="table table-sm table-hover mb-0" style="white-space:nowrap;">
+                    <thead class="table-light">
+                        <tr>
+                            <th style="width:34px;" title="Include in tally & export"><i class="fa fa-check"></i></th>
+                            <th>PO #</th>
+                            <th>Product</th>
+                            <th>Mfr</th>
+                            <th>Dist</th>
+                            <th class="text-end">Ord</th>
+                            <th class="text-end">Recv</th>
+                            <th class="text-end">Expected Cost</th>
+                            <th class="text-end">Charged</th>
+                            <th class="text-end">Dist $</th>
+                            <th class="text-end">Mfr $</th>
+                            <th class="text-end">Add'l $</th>
+                            <th class="text-end">Proc Fee</th>
+                            <th class="text-end">Captured</th>
+                        </tr>
+                    </thead>
+                    <tbody id="fin_tbody"></tbody>
+                    <tfoot class="table-light fw-bold" id="fin_tfoot"></tfoot>
+                </table>
+            </div>
+        </div>
+        <p class="text-muted small mt-2 mb-0">
+            All PO lines for the selected year. Uncheck a row to drop it from the tally and the export (saved).
+            <strong>Expected Cost</strong> = Dec cost × ordered qty. <strong>Charged</strong> = actual invoiced total on received units.
+            <strong>Dist/Mfr/Add'l $</strong> = rebate dollars (earned + pending). <strong>Proc Fee</strong> = 2% of Expected Cost,
+            skipped for products with the fee turned off. <strong>Captured</strong> = Dist + Mfr + Add'l + Proc Fee.
+        </p>
     </div>
 </section>
 
@@ -1147,6 +1256,16 @@ h1, h2, h3, h4, h5, h6 { font-weight: 600; }
                         <div class="input-group input-group-sm">
                             <span class="input-group-text">$</span>
                             <input type="number" step="0.0001" class="form-control text-end" id="pm_addf">
+                        </div>
+                    </div>
+
+                    <div class="col-12">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="pm_procfee" checked>
+                            <label class="form-check-label small" for="pm_procfee">
+                                Charge procurement fee on this item
+                                <span class="text-muted">(uncheck to exclude it from procurement fees on the Finalize sheet)</span>
+                            </label>
                         </div>
                     </div>
 
@@ -2028,6 +2147,7 @@ function showPage(name) {
     if (name === 'products') renderProducts();
     if (name === 'pos') renderPos();
     if (name === 'checks') renderChecks();
+    if (name === 'finalize') renderFinalize();
     if (name === 'settings') renderSettings();
 }
 
@@ -2482,6 +2602,7 @@ function openProductModal(productId) {
         document.getElementById('pm_id').value = '';
         ['pm_title','pm_pkg','pm_control','pm_mfg','pm_dist'].forEach(id => document.getElementById(id).value = '');
         ['pm_dec','pm_red','pm_distpct','pm_anchor','pm_mfrpct','pm_addf'].forEach(id => document.getElementById(id).value = '');
+        document.getElementById('pm_procfee').checked = true;
     } else {
         const p = state.products.find(x => x.id === productId);
         if (!p) return;
@@ -2507,6 +2628,8 @@ function openProductModal(productId) {
         document.getElementById('pm_anchor').value = ln.mfrAnchor || '';
         document.getElementById('pm_mfrpct').value = ln.mfrProgramPct || '';
         document.getElementById('pm_addf').value = ln.additionalFunds || '';
+        // Procurement fee defaults ON; only false when explicitly disabled
+        document.getElementById('pm_procfee').checked = (p.procurementFee !== false);
     }
 
     updatePmCalcPreview();
@@ -2584,6 +2707,8 @@ document.getElementById('pm_save_btn').addEventListener('click', function() {
     p.lowNets.mfrAnchor = mfrAnchor;
     p.lowNets.mfrProgramPct = mfrPct;
     p.lowNets.additionalFunds = addFunds;
+    // Procurement fee flag (default on). Stored on the product, not the price sheet.
+    p.procurementFee = document.getElementById('pm_procfee').checked;
 
     // Upsert the distributor program (source of truth for dist rebate).
     // Always demote other primaries for this product so there's exactly one primary.
@@ -4248,6 +4373,290 @@ function toggleForceRebate(poId, lineId) {
     if (active && active.id === 'page-dashboard') renderDashboard();
     toast(line.forceRebate ? 'Flagged as should-have-rebate' : 'Removed should-have-rebate flag', 'success');
 }
+
+/* ============================================================
+   FINALIZE — per-line program economics
+   ============================================================
+   Reuses computePoLineRebate (canonical, invoice-aware) for rebate $,
+   splitting the Mfr bucket into Mfr-only vs Add'l Funds so they can be
+   reported separately. Procurement fee = 2% of Expected Low Net (Price
+   Sheet economics) × ordered qty. Nothing here mutates state. */
+function computePoLineFinal(line, po) {
+    const product = state.products.find(p => p.id === line.productId);
+    const orderedQty = Number(line.qtyOrdered) || 0;
+    const recvQty = receivedForLine(po, line.id);
+    const ln = (product && product.lowNets) || {};
+
+    // Canonical rebate dollars (earned + pending)
+    const reb = computePoLineRebate(line, po);
+    const distDollars = reb.distRebate;
+
+    // Split the Mfr bucket into Mfr-only vs Add'l (computePoLineRebate folds
+    // add'l into mfr as: perUnit = anchor×pct + addFunds). Proportional split
+    // guarantees mfrOnly + addl === reb.mfrRebate, so totals still tie out.
+    const addFundsPerUnit = Number(ln.additionalFunds) || 0;
+    const mfrPerUnit = (Number(ln.mfrAnchor) || 0) * (Number(ln.mfrProgramPct) || 0) + addFundsPerUnit;
+    let addlDollars = 0, mfrDollars = reb.mfrRebate;
+    if (mfrPerUnit > 0) {
+        addlDollars = reb.mfrRebate * (addFundsPerUnit / mfrPerUnit);
+        mfrDollars = reb.mfrRebate - addlDollars;
+    }
+
+    // Expected cost from Dec pricing; Charged = actual invoiced (received)
+    const expectedCost = (Number(ln.distDecCost) || 0) * orderedQty;
+    const charged = receivedCostForLine(po, line.id);
+
+    // Procurement fee: 2% (tcaMarkup) of Expected Cost = Dec × ordered qty,
+    // charged on every item UNLESS the product has it toggled off.
+    const chargeProc = product ? (product.procurementFee !== false) : true;
+    const procFee = chargeProc ? expectedCost * (gs().tcaMarkup || 0) : 0;
+
+    // Per-unit low-net figures (Price Sheet economics) for the export detail cols
+    let redemption = 0, programPct = 0;
+    if (product && product.distributorId) {
+        const { program } = findDistributorProgram(product.id, product.distributorId);
+        if (program) { redemption = program.redemption || 0; programPct = program.programPct || 0; }
+    }
+    const calc = computeLowNets({
+        distRedemption: redemption, distProgramPct: programPct,
+        mfrAnchor: ln.mfrAnchor || 0, mfrProgramPct: ln.mfrProgramPct || 0,
+        additionalFunds: ln.additionalFunds || 0, distDecCost: ln.distDecCost || 0
+    });
+
+    const captured = distDollars + mfrDollars + addlDollars + procFee;
+
+    return {
+        product, orderedQty, recvQty,
+        expectedCost, charged,
+        distDollars, mfrDollars, addlDollars, procFee, captured,
+        chargeProc,
+        programmed: countsForRebate(line),
+        expectedLowNetUnit: calc.expectedLowNet, tcaLowNetUnit: calc.tcaLowNet
+    };
+}
+
+// Gather PO lines for the current year (optionally filtered).
+function collectFinalizeRows() {
+    const search = (document.getElementById('fin_search').value || '').toLowerCase();
+    const mfgFilter = document.getElementById('fin_mfg').value;
+    const distFilter = document.getElementById('fin_dist').value;
+    const programmedOnly = document.getElementById('fin_programmed_only').checked;
+    const pos = (state.purchaseOrders || []).filter(po => po.year === state.currentYear);
+
+    const rows = [];
+    pos.forEach(po => {
+        (po.lines || []).forEach(line => {
+            const product = state.products.find(p => p.id === line.productId);
+            const mfg = state.suppliers.find(s => s.id === line.manufacturerId)
+                     || (product && state.suppliers.find(s => s.id === product.manufacturerId));
+            const dist = state.suppliers.find(s => s.id === line.distributorId)
+                     || (product && state.suppliers.find(s => s.id === product.distributorId));
+
+            if (programmedOnly && !countsForRebate(line)) return;
+            if (mfgFilter && String(mfg ? mfg.id : '') !== mfgFilter) return;
+            if (distFilter && String(dist ? dist.id : '') !== distFilter) return;
+            if (search) {
+                const hay = ((product ? product.title : '') + ' ' +
+                             (product ? (product.control || '') : '') + ' ' +
+                             (po.number || '')).toLowerCase();
+                if (!hay.includes(search)) return;
+            }
+
+            const f = computePoLineFinal(line, po);
+            rows.push({
+                poId: po.id, lineId: line.id,
+                excluded: !!line.excludeFromFinalize,
+                poNumber: po.number || ('#' + po.id),
+                title: product ? product.title : '(unknown product)',
+                pkg: product ? (product.packageSize || '') : '',
+                control: product ? (product.control || '') : '',
+                mfgName: mfg ? mfg.name : '',
+                distName: dist ? dist.name : '',
+                ...f
+            });
+        });
+    });
+    return rows;
+}
+
+// Per-line include/exclude from the finalized tally + export (persisted on the line)
+function toggleFinalizeExclude(poId, lineId) {
+    const po = (state.purchaseOrders || []).find(p => p.id === poId);
+    if (!po) return;
+    const line = (po.lines || []).find(l => l.id === lineId);
+    if (!line) return;
+    line.excludeFromFinalize = !line.excludeFromFinalize;
+    save();
+    renderFinalize();
+}
+
+function renderFinalize() {
+    document.getElementById('finYearLabel').textContent = state.currentYear;
+
+    // Filter dropdowns (manufacturers / distributors)
+    const mfgSel = document.getElementById('fin_mfg');
+    const mfgCur = mfgSel.value;
+    mfgSel.innerHTML = '<option value="">All</option>' +
+        state.suppliers.filter(s => s.kind === 'manufacturer')
+            .sort((a, b) => a.name.localeCompare(b.name))
+            .map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('');
+    mfgSel.value = mfgCur;
+
+    const distSel = document.getElementById('fin_dist');
+    const distCur = distSel.value;
+    distSel.innerHTML = '<option value="">All</option>' +
+        state.suppliers.filter(s => s.kind === 'distributor')
+            .sort((a, b) => a.name.localeCompare(b.name))
+            .map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('');
+    distSel.value = distCur;
+
+    const rows = collectFinalizeRows();
+    const includedCount = rows.filter(r => !r.excluded).length;
+    document.getElementById('fin_count').textContent =
+        `${rows.length} line${rows.length === 1 ? '' : 's'}${rows.length !== includedCount ? ` (${includedCount} in tally)` : ''}`;
+
+    const tbody = document.getElementById('fin_tbody');
+    const tfoot = document.getElementById('fin_tfoot');
+
+    if (rows.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="14" class="text-center text-muted py-4">
+            No lines for ${state.currentYear}${
+                (document.getElementById('fin_search').value ||
+                 document.getElementById('fin_mfg').value ||
+                 document.getElementById('fin_dist').value ||
+                 document.getElementById('fin_programmed_only').checked) ? ' matching the filter' : ''}.
+        </td></tr>`;
+        tfoot.innerHTML = '';
+        document.getElementById('fin_sum_expcost').textContent = fmt.usd(0);
+        document.getElementById('fin_sum_rebates').textContent = fmt.usd(0);
+        document.getElementById('fin_sum_fees').textContent = fmt.usd(0);
+        document.getElementById('fin_sum_captured').textContent = fmt.usd(0);
+        return;
+    }
+
+    const t = { exp: 0, charged: 0, dist: 0, mfr: 0, addl: 0, fee: 0, cap: 0, ord: 0, recv: 0 };
+
+    tbody.innerHTML = rows.map(r => {
+        if (!r.excluded) {
+            t.exp += r.expectedCost; t.charged += r.charged;
+            t.dist += r.distDollars; t.mfr += r.mfrDollars; t.addl += r.addlDollars;
+            t.fee += r.procFee; t.cap += r.captured;
+            t.ord += r.orderedQty; t.recv += r.recvQty;
+        }
+        const rowCls = r.excluded ? ' class="text-muted table-secondary"' : '';
+        const procCell = r.chargeProc
+            ? fmt.usd(r.procFee)
+            : '<span class="text-muted" title="Procurement fee turned off for this product">off</span>';
+        return `<tr${rowCls}>
+            <td class="text-center">
+                <input type="checkbox" class="form-check-input fin-include" data-po="${r.poId}" data-line="${r.lineId}"
+                       ${r.excluded ? '' : 'checked'} title="Include this line in the tally & export">
+            </td>
+            <td><small>${escapeHtml(r.poNumber)}</small></td>
+            <td><strong>${escapeHtml(r.title)}</strong>
+                <small class="text-muted d-block">${escapeHtml(r.pkg)}${r.control ? ' · ' + escapeHtml(r.control) : ''}${r.programmed ? '' : ' · <span class="text-warning">no program</span>'}</small></td>
+            <td><small>${escapeHtml(r.mfgName)}</small></td>
+            <td><small>${escapeHtml(r.distName)}</small></td>
+            <td class="text-end">${fmt.qty(r.orderedQty)}</td>
+            <td class="text-end">${fmt.qty(r.recvQty)}</td>
+            <td class="text-end">${fmt.usd(r.expectedCost)}</td>
+            <td class="text-end">${r.charged > 0 ? fmt.usd(r.charged) : '<span class="text-muted">—</span>'}</td>
+            <td class="text-end text-primary">${fmt.usd(r.distDollars)}</td>
+            <td class="text-end text-primary">${fmt.usd(r.mfrDollars)}</td>
+            <td class="text-end text-primary">${fmt.usd(r.addlDollars)}</td>
+            <td class="text-end text-info">${procCell}</td>
+            <td class="text-end text-success fw-bold">${fmt.usd(r.captured)}</td>
+        </tr>`;
+    }).join('');
+
+    tfoot.innerHTML = `<tr>
+        <td></td>
+        <td colspan="4">TOTAL &mdash; ${includedCount} line${includedCount === 1 ? '' : 's'} in tally</td>
+        <td class="text-end">${fmt.qty(t.ord)}</td>
+        <td class="text-end">${fmt.qty(t.recv)}</td>
+        <td class="text-end">${fmt.usd(t.exp)}</td>
+        <td class="text-end">${fmt.usd(t.charged)}</td>
+        <td class="text-end">${fmt.usd(t.dist)}</td>
+        <td class="text-end">${fmt.usd(t.mfr)}</td>
+        <td class="text-end">${fmt.usd(t.addl)}</td>
+        <td class="text-end">${fmt.usd(t.fee)}</td>
+        <td class="text-end text-success">${fmt.usd(t.cap)}</td>
+    </tr>`;
+
+    document.getElementById('fin_sum_expcost').textContent = fmt.usd(t.exp);
+    document.getElementById('fin_sum_rebates').textContent = fmt.usd(t.dist + t.mfr + t.addl);
+    document.getElementById('fin_sum_fees').textContent = fmt.usd(t.fee);
+    document.getElementById('fin_sum_captured').textContent = fmt.usd(t.cap);
+
+    document.querySelectorAll('#fin_tbody .fin-include').forEach(cb =>
+        cb.addEventListener('change', () =>
+            toggleFinalizeExclude(parseInt(cb.dataset.po, 10), parseInt(cb.dataset.line, 10))));
+}
+
+function exportFinalizeXlsx() {
+    const rows = collectFinalizeRows().filter(r => !r.excluded);
+    if (rows.length === 0) { toast('No lines to export', 'danger'); return; }
+
+    const header = ['PO #', 'Product', 'Pkg Size', 'Control #', 'Manufacturer', 'Distributor', 'Programmed',
+        'Ordered Qty', 'Received Qty', 'Expected Cost (Dec)', 'Charged (Actual)',
+        'Dist Rebate $', 'Mfr Rebate $', "Add'l Funds $", 'Procurement Fee', 'Captured $',
+        'Exp Low Net /unit', 'TCA Low Net /unit'];
+
+    const round2 = v => Math.round((Number(v) || 0) * 100) / 100;
+    const round4 = v => Math.round((Number(v) || 0) * 10000) / 10000;
+
+    const aoa = [header];
+    const t = { ord: 0, recv: 0, exp: 0, charged: 0, dist: 0, mfr: 0, addl: 0, fee: 0, cap: 0 };
+    rows.forEach(r => {
+        t.ord += r.orderedQty; t.recv += r.recvQty; t.exp += r.expectedCost; t.charged += r.charged;
+        t.dist += r.distDollars; t.mfr += r.mfrDollars; t.addl += r.addlDollars; t.fee += r.procFee; t.cap += r.captured;
+        aoa.push([
+            r.poNumber, r.title, r.pkg, r.control, r.mfgName, r.distName, r.programmed ? 'Yes' : 'No',
+            r.orderedQty, r.recvQty, round2(r.expectedCost), round2(r.charged),
+            round2(r.distDollars), round2(r.mfrDollars), round2(r.addlDollars),
+            r.chargeProc ? round2(r.procFee) : 'off', round2(r.captured),
+            round4(r.expectedLowNetUnit), round4(r.tcaLowNetUnit)
+        ]);
+    });
+    aoa.push([
+        'TOTAL', '', '', '', '', '', '',
+        round2(t.ord), round2(t.recv), round2(t.exp), round2(t.charged),
+        round2(t.dist), round2(t.mfr), round2(t.addl), round2(t.fee), round2(t.cap),
+        '', ''
+    ]);
+
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    ws['!cols'] = [
+        { wch: 10 }, { wch: 32 }, { wch: 12 }, { wch: 12 }, { wch: 18 }, { wch: 18 }, { wch: 11 },
+        { wch: 11 }, { wch: 12 }, { wch: 16 }, { wch: 15 },
+        { wch: 13 }, { wch: 13 }, { wch: 13 }, { wch: 16 }, { wch: 13 },
+        { wch: 15 }, { wch: 15 }
+    ];
+    // Currency format on money columns (J..P => 0-indexed 9..15), 4dp on low-net (Q,R => 16,17)
+    const range = XLSX.utils.decode_range(ws['!ref']);
+    for (let R = 1; R <= range.e.r; R++) {
+        for (let C = 9; C <= 15; C++) {
+            const cell = ws[XLSX.utils.encode_cell({ r: R, c: C })];
+            if (cell && typeof cell.v === 'number') cell.z = '$#,##0.00';
+        }
+        for (let C = 16; C <= 17; C++) {
+            const cell = ws[XLSX.utils.encode_cell({ r: R, c: C })];
+            if (cell && typeof cell.v === 'number') cell.z = '$#,##0.0000';
+        }
+    }
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Finalize ' + state.currentYear);
+    XLSX.writeFile(wb, 'finalize-' + state.currentYear + '.xlsx');
+    toast('Exported ' + rows.length + ' lines to Excel', 'success');
+}
+
+// Finalize filter + export wiring
+document.getElementById('fin_search').addEventListener('input', renderFinalize);
+document.getElementById('fin_mfg').addEventListener('change', renderFinalize);
+document.getElementById('fin_dist').addEventListener('change', renderFinalize);
+document.getElementById('fin_programmed_only').addEventListener('change', renderFinalize);
+document.getElementById('fin_export_btn').addEventListener('click', exportFinalizeXlsx);
 
 function renderPos() {
     document.getElementById('poYearLabel').textContent = state.currentYear;
