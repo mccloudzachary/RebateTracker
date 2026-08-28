@@ -608,25 +608,25 @@ h1, h2, h3, h4, h5, h6 { font-weight: 600; }
 
         <div class="row g-3 mb-3">
             <div class="col-md-3 col-6">
-                <div class="card border-secondary">
+                <div class="card border-primary">
                     <div class="card-body py-2">
-                        <div class="text-uppercase small text-muted">Expected Cost (Dec)</div>
-                        <div class="h5 mb-0" id="fin_sum_expcost">$0.00</div>
+                        <div class="text-uppercase small text-muted">Distribution $</div>
+                        <div class="h5 mb-0 text-primary" id="fin_sum_dist">$0.00</div>
                     </div>
                 </div>
             </div>
             <div class="col-md-3 col-6">
                 <div class="card border-primary">
                     <div class="card-body py-2">
-                        <div class="text-uppercase small text-muted">Total Rebates</div>
-                        <div class="h5 mb-0 text-primary" id="fin_sum_rebates">$0.00</div>
+                        <div class="text-uppercase small text-muted">Mfr + Add'l $</div>
+                        <div class="h5 mb-0 text-primary" id="fin_sum_mfr">$0.00</div>
                     </div>
                 </div>
             </div>
             <div class="col-md-3 col-6">
                 <div class="card border-info">
                     <div class="card-body py-2">
-                        <div class="text-uppercase small text-muted">Procurement Fees (2%)</div>
+                        <div class="text-uppercase small text-muted">Procurement Fees</div>
                         <div class="h5 mb-0 text-info" id="fin_sum_fees">$0.00</div>
                     </div>
                 </div>
@@ -634,8 +634,8 @@ h1, h2, h3, h4, h5, h6 { font-weight: 600; }
             <div class="col-md-3 col-6">
                 <div class="card border-success">
                     <div class="card-body py-2">
-                        <div class="text-uppercase small text-muted">Total Captured</div>
-                        <div class="h5 mb-0 text-success" id="fin_sum_captured">$0.00</div>
+                        <div class="text-uppercase small text-muted">Total Rebate</div>
+                        <div class="h5 mb-0 text-success" id="fin_sum_rebate">$0.00</div>
                     </div>
                 </div>
             </div>
@@ -673,19 +673,19 @@ h1, h2, h3, h4, h5, h6 { font-weight: 600; }
                     <thead class="table-light">
                         <tr>
                             <th style="width:34px;" title="Include in tally & export"><i class="fa fa-check"></i></th>
-                            <th>PO #</th>
                             <th>Product</th>
                             <th>Mfr</th>
                             <th>Dist</th>
                             <th class="text-end">Ord</th>
                             <th class="text-end">Recv</th>
-                            <th class="text-end">Expected Cost</th>
-                            <th class="text-end">Charged</th>
+                            <th class="text-end">Invoice/unit</th>
+                            <th class="text-end">Dist %</th>
                             <th class="text-end">Dist $</th>
+                            <th class="text-end">Mfr %</th>
                             <th class="text-end">Mfr $</th>
                             <th class="text-end">Add'l $</th>
                             <th class="text-end">Proc Fee</th>
-                            <th class="text-end">Captured</th>
+                            <th class="text-end">Total Rebate</th>
                         </tr>
                     </thead>
                     <tbody id="fin_tbody"></tbody>
@@ -695,9 +695,9 @@ h1, h2, h3, h4, h5, h6 { font-weight: 600; }
         </div>
         <p class="text-muted small mt-2 mb-0">
             All PO lines for the selected year. Uncheck a row to drop it from the tally and the export (saved).
-            <strong>Expected Cost</strong> = Dec cost × ordered qty. <strong>Charged</strong> = actual invoiced total on received units.
-            <strong>Dist/Mfr/Add'l $</strong> = rebate dollars (earned + pending). <strong>Proc Fee</strong> = 2% of Expected Cost,
-            skipped for products with the fee turned off. <strong>Captured</strong> = Dist + Mfr + Add'l + Proc Fee.
+            <strong>Invoice/unit</strong> = actual invoiced cost per received unit. <strong>Dist $ / Mfr $ / Add'l $</strong> = rebate dollars (earned + pending).
+            <strong>Proc Fee</strong> = 2% of Expected Cost, skipped for products with the fee turned off.
+            <strong>Total Rebate</strong> = Dist + Mfr + Add'l (excludes procurement fee).
         </p>
     </div>
 </section>
@@ -4411,27 +4411,27 @@ function computePoLineFinal(line, po) {
     const chargeProc = product ? (product.procurementFee !== false) : true;
     const procFee = chargeProc ? expectedCost * (gs().tcaMarkup || 0) : 0;
 
-    // Per-unit low-net figures (Price Sheet economics) for the export detail cols
-    let redemption = 0, programPct = 0;
+    // Program percentages (rates) for display
+    let redemption = 0, distPct = 0;
     if (product && product.distributorId) {
         const { program } = findDistributorProgram(product.id, product.distributorId);
-        if (program) { redemption = program.redemption || 0; programPct = program.programPct || 0; }
+        if (program) { redemption = program.redemption || 0; distPct = program.programPct || 0; }
     }
-    const calc = computeLowNets({
-        distRedemption: redemption, distProgramPct: programPct,
-        mfrAnchor: ln.mfrAnchor || 0, mfrProgramPct: ln.mfrProgramPct || 0,
-        additionalFunds: ln.additionalFunds || 0, distDecCost: ln.distDecCost || 0
-    });
+    const mfrPct = Number(ln.mfrProgramPct) || 0;
 
-    const captured = distDollars + mfrDollars + addlDollars + procFee;
+    // Actual invoiced cost per unit (received units); null if nothing received
+    const invoiceUnit = avgUnitCostForLine(po, line.id);
+
+    const totalRebate = distDollars + mfrDollars + addlDollars;
+    const captured = totalRebate + procFee;
 
     return {
         product, orderedQty, recvQty,
-        expectedCost, charged,
-        distDollars, mfrDollars, addlDollars, procFee, captured,
+        expectedCost, charged, invoiceUnit,
+        distPct, mfrPct,
+        distDollars, mfrDollars, addlDollars, procFee, totalRebate, captured,
         chargeProc,
-        programmed: countsForRebate(line),
-        expectedLowNetUnit: calc.expectedLowNet, tcaLowNetUnit: calc.tcaLowNet
+        programmed: countsForRebate(line)
     };
 }
 
@@ -4527,20 +4527,20 @@ function renderFinalize() {
                  document.getElementById('fin_programmed_only').checked) ? ' matching the filter' : ''}.
         </td></tr>`;
         tfoot.innerHTML = '';
-        document.getElementById('fin_sum_expcost').textContent = fmt.usd(0);
-        document.getElementById('fin_sum_rebates').textContent = fmt.usd(0);
+        document.getElementById('fin_sum_dist').textContent = fmt.usd(0);
+        document.getElementById('fin_sum_mfr').textContent = fmt.usd(0);
         document.getElementById('fin_sum_fees').textContent = fmt.usd(0);
-        document.getElementById('fin_sum_captured').textContent = fmt.usd(0);
+        document.getElementById('fin_sum_rebate').textContent = fmt.usd(0);
         return;
     }
 
-    const t = { exp: 0, charged: 0, dist: 0, mfr: 0, addl: 0, fee: 0, cap: 0, ord: 0, recv: 0 };
+    const t = { dist: 0, mfr: 0, addl: 0, fee: 0, reb: 0, ord: 0, recv: 0 };
+    const pctCell = v => (Number(v) > 0) ? (v * 100).toFixed(2) + '%' : '<span class="text-muted">—</span>';
 
     tbody.innerHTML = rows.map(r => {
         if (!r.excluded) {
-            t.exp += r.expectedCost; t.charged += r.charged;
             t.dist += r.distDollars; t.mfr += r.mfrDollars; t.addl += r.addlDollars;
-            t.fee += r.procFee; t.cap += r.captured;
+            t.fee += r.procFee; t.reb += r.totalRebate;
             t.ord += r.orderedQty; t.recv += r.recvQty;
         }
         const rowCls = r.excluded ? ' class="text-muted table-secondary"' : '';
@@ -4552,41 +4552,42 @@ function renderFinalize() {
                 <input type="checkbox" class="form-check-input fin-include" data-po="${r.poId}" data-line="${r.lineId}"
                        ${r.excluded ? '' : 'checked'} title="Include this line in the tally & export">
             </td>
-            <td><small>${escapeHtml(r.poNumber)}</small></td>
             <td><strong>${escapeHtml(r.title)}</strong>
                 <small class="text-muted d-block">${escapeHtml(r.pkg)}${r.control ? ' · ' + escapeHtml(r.control) : ''}${r.programmed ? '' : ' · <span class="text-warning">no program</span>'}</small></td>
             <td><small>${escapeHtml(r.mfgName)}</small></td>
             <td><small>${escapeHtml(r.distName)}</small></td>
             <td class="text-end">${fmt.qty(r.orderedQty)}</td>
             <td class="text-end">${fmt.qty(r.recvQty)}</td>
-            <td class="text-end">${fmt.usd(r.expectedCost)}</td>
-            <td class="text-end">${r.charged > 0 ? fmt.usd(r.charged) : '<span class="text-muted">—</span>'}</td>
+            <td class="text-end">${r.invoiceUnit != null ? fmt.usd(r.invoiceUnit) : '<span class="text-muted">—</span>'}</td>
+            <td class="text-end">${pctCell(r.distPct)}</td>
             <td class="text-end text-primary">${fmt.usd(r.distDollars)}</td>
+            <td class="text-end">${pctCell(r.mfrPct)}</td>
             <td class="text-end text-primary">${fmt.usd(r.mfrDollars)}</td>
             <td class="text-end text-primary">${fmt.usd(r.addlDollars)}</td>
             <td class="text-end text-info">${procCell}</td>
-            <td class="text-end text-success fw-bold">${fmt.usd(r.captured)}</td>
+            <td class="text-end text-success fw-bold">${fmt.usd(r.totalRebate)}</td>
         </tr>`;
     }).join('');
 
     tfoot.innerHTML = `<tr>
         <td></td>
-        <td colspan="4">TOTAL &mdash; ${includedCount} line${includedCount === 1 ? '' : 's'} in tally</td>
+        <td colspan="3">TOTAL &mdash; ${includedCount} line${includedCount === 1 ? '' : 's'} in tally</td>
         <td class="text-end">${fmt.qty(t.ord)}</td>
         <td class="text-end">${fmt.qty(t.recv)}</td>
-        <td class="text-end">${fmt.usd(t.exp)}</td>
-        <td class="text-end">${fmt.usd(t.charged)}</td>
+        <td></td>
+        <td></td>
         <td class="text-end">${fmt.usd(t.dist)}</td>
+        <td></td>
         <td class="text-end">${fmt.usd(t.mfr)}</td>
         <td class="text-end">${fmt.usd(t.addl)}</td>
         <td class="text-end">${fmt.usd(t.fee)}</td>
-        <td class="text-end text-success">${fmt.usd(t.cap)}</td>
+        <td class="text-end text-success">${fmt.usd(t.reb)}</td>
     </tr>`;
 
-    document.getElementById('fin_sum_expcost').textContent = fmt.usd(t.exp);
-    document.getElementById('fin_sum_rebates').textContent = fmt.usd(t.dist + t.mfr + t.addl);
+    document.getElementById('fin_sum_dist').textContent = fmt.usd(t.dist);
+    document.getElementById('fin_sum_mfr').textContent = fmt.usd(t.mfr + t.addl);
     document.getElementById('fin_sum_fees').textContent = fmt.usd(t.fee);
-    document.getElementById('fin_sum_captured').textContent = fmt.usd(t.cap);
+    document.getElementById('fin_sum_rebate').textContent = fmt.usd(t.reb);
 
     document.querySelectorAll('#fin_tbody .fin-include').forEach(cb =>
         cb.addEventListener('change', () =>
@@ -4597,52 +4598,55 @@ function exportFinalizeXlsx() {
     const rows = collectFinalizeRows().filter(r => !r.excluded);
     if (rows.length === 0) { toast('No lines to export', 'danger'); return; }
 
-    const header = ['PO #', 'Product', 'Pkg Size', 'Control #', 'Manufacturer', 'Distributor', 'Programmed',
-        'Ordered Qty', 'Received Qty', 'Expected Cost (Dec)', 'Charged (Actual)',
-        'Dist Rebate $', 'Mfr Rebate $', "Add'l Funds $", 'Procurement Fee', 'Captured $',
-        'Exp Low Net /unit', 'TCA Low Net /unit'];
+    const header = ['Product', 'Pkg Size', 'Control #', 'Manufacturer', 'Distributor', 'Programmed',
+        'Ordered Qty', 'Received Qty', 'Invoice / Unit', 'Dist %', 'Dist $', 'Mfr %', 'Mfr $',
+        "Add'l Funds $", 'Procurement Fee', 'Total Rebate $'];
 
     const round2 = v => Math.round((Number(v) || 0) * 100) / 100;
     const round4 = v => Math.round((Number(v) || 0) * 10000) / 10000;
 
     const aoa = [header];
-    const t = { ord: 0, recv: 0, exp: 0, charged: 0, dist: 0, mfr: 0, addl: 0, fee: 0, cap: 0 };
+    const t = { ord: 0, recv: 0, dist: 0, mfr: 0, addl: 0, fee: 0, reb: 0 };
     rows.forEach(r => {
-        t.ord += r.orderedQty; t.recv += r.recvQty; t.exp += r.expectedCost; t.charged += r.charged;
-        t.dist += r.distDollars; t.mfr += r.mfrDollars; t.addl += r.addlDollars; t.fee += r.procFee; t.cap += r.captured;
+        t.ord += r.orderedQty; t.recv += r.recvQty;
+        t.dist += r.distDollars; t.mfr += r.mfrDollars; t.addl += r.addlDollars;
+        t.fee += r.procFee; t.reb += r.totalRebate;
         aoa.push([
-            r.poNumber, r.title, r.pkg, r.control, r.mfgName, r.distName, r.programmed ? 'Yes' : 'No',
-            r.orderedQty, r.recvQty, round2(r.expectedCost), round2(r.charged),
-            round2(r.distDollars), round2(r.mfrDollars), round2(r.addlDollars),
-            r.chargeProc ? round2(r.procFee) : 'off', round2(r.captured),
-            round4(r.expectedLowNetUnit), round4(r.tcaLowNetUnit)
+            r.title, r.pkg, r.control, r.mfgName, r.distName, r.programmed ? 'Yes' : 'No',
+            r.orderedQty, r.recvQty,
+            r.invoiceUnit != null ? round4(r.invoiceUnit) : '',
+            round4(r.distPct), round2(r.distDollars),
+            round4(r.mfrPct), round2(r.mfrDollars), round2(r.addlDollars),
+            r.chargeProc ? round2(r.procFee) : 'off', round2(r.totalRebate)
         ]);
     });
     aoa.push([
-        'TOTAL', '', '', '', '', '', '',
-        round2(t.ord), round2(t.recv), round2(t.exp), round2(t.charged),
-        round2(t.dist), round2(t.mfr), round2(t.addl), round2(t.fee), round2(t.cap),
-        '', ''
+        'TOTAL', '', '', '', '', '',
+        round2(t.ord), round2(t.recv), '', '', round2(t.dist), '', round2(t.mfr),
+        round2(t.addl), round2(t.fee), round2(t.reb)
     ]);
 
     const ws = XLSX.utils.aoa_to_sheet(aoa);
     ws['!cols'] = [
-        { wch: 10 }, { wch: 32 }, { wch: 12 }, { wch: 12 }, { wch: 18 }, { wch: 18 }, { wch: 11 },
-        { wch: 11 }, { wch: 12 }, { wch: 16 }, { wch: 15 },
-        { wch: 13 }, { wch: 13 }, { wch: 13 }, { wch: 16 }, { wch: 13 },
-        { wch: 15 }, { wch: 15 }
+        { wch: 32 }, { wch: 12 }, { wch: 12 }, { wch: 18 }, { wch: 18 }, { wch: 11 },
+        { wch: 11 }, { wch: 12 }, { wch: 14 }, { wch: 9 }, { wch: 13 }, { wch: 9 }, { wch: 13 },
+        { wch: 13 }, { wch: 16 }, { wch: 14 }
     ];
-    // Currency format on money columns (J..P => 0-indexed 9..15), 4dp on low-net (Q,R => 16,17)
     const range = XLSX.utils.decode_range(ws['!ref']);
     for (let R = 1; R <= range.e.r; R++) {
-        for (let C = 9; C <= 15; C++) {
-            const cell = ws[XLSX.utils.encode_cell({ r: R, c: C })];
-            if (cell && typeof cell.v === 'number') cell.z = '$#,##0.00';
-        }
-        for (let C = 16; C <= 17; C++) {
-            const cell = ws[XLSX.utils.encode_cell({ r: R, c: C })];
-            if (cell && typeof cell.v === 'number') cell.z = '$#,##0.0000';
-        }
+        // Invoice/unit (8) 4dp currency
+        let cell = ws[XLSX.utils.encode_cell({ r: R, c: 8 })];
+        if (cell && typeof cell.v === 'number') cell.z = '$#,##0.0000';
+        // Dist % (9) and Mfr % (11) as percent
+        [9, 11].forEach(C => {
+            const pc = ws[XLSX.utils.encode_cell({ r: R, c: C })];
+            if (pc && typeof pc.v === 'number') pc.z = '0.00%';
+        });
+        // Dollar columns: Dist $ (10), Mfr $ (12), Add'l (13), Proc Fee (14), Total Rebate (15)
+        [10, 12, 13, 14, 15].forEach(C => {
+            const dc = ws[XLSX.utils.encode_cell({ r: R, c: C })];
+            if (dc && typeof dc.v === 'number') dc.z = '$#,##0.00';
+        });
     }
 
     const wb = XLSX.utils.book_new();
